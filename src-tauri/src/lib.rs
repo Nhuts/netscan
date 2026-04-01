@@ -2,7 +2,7 @@ mod config;
 mod commands;
 mod scanner;
 
-#[cfg_attr(mobile, tauri::mobile_entrypoint)]
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

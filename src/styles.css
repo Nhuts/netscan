@@ -52,6 +52,10 @@ input {
 
 #app {
   min-height: 100vh;
+  padding: env(safe-area-inset-top, 0)
+            env(safe-area-inset-right, 0)
+            env(safe-area-inset-bottom, 0)
+            env(safe-area-inset-left, 0);
 }
 
 .app-shell {

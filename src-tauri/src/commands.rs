@@ -2,7 +2,7 @@ use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 
-use crate::config::load_scan_config;
+use crate::config::{load_scan_config, ScanConfig};
 use crate::scanner;
 
 #[derive(Serialize, Clone)]
@@ -18,6 +18,97 @@ pub struct Device {
     pub ip: String,
     pub hostname: Option<String>,
     pub status: String,
+}
+
+#[cfg(target_os = "android")]
+fn get_local_network_info_android() -> LocalNetworkInfo {
+    // Versuche zuerst WLAN-Interface
+    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
+        let net = network_address(ip, prefix);
+        LocalNetworkInfo {
+            address: Some(ip.to_string()),
+            prefix: Some(prefix),
+            network_address: Some(net.to_string()),
+            cidr: Some(format!("{}/{}", net, prefix)),
+        }
+    } else if let Some(ip) = routed_local_ipv4() {
+        let prefix = 24;
+        let net = network_address(ip, prefix);
+        LocalNetworkInfo {
+            address: Some(ip.to_string()),
+            prefix: Some(prefix),
+            network_address: Some(net.to_string()),
+            cidr: Some(format!("{}/{}", net, prefix)),
+        }
+    } else {
+        LocalNetworkInfo {
+            address: None,
+            prefix: None,
+            network_address: None,
+            cidr: None,
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn get_local_network_info_desktop() -> LocalNetworkInfo {
+    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
+        let net = network_address(ip, prefix);
+        LocalNetworkInfo {
+            address: Some(ip.to_string()),
+            prefix: Some(prefix),
+            network_address: Some(net.to_string()),
+            cidr: Some(format!("{}/{}", net, prefix)),
+        }
+    } else {
+        LocalNetworkInfo {
+            address: None,
+            prefix: None,
+            network_address: None,
+            cidr: None,
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+fn scan_network_android(config: &ScanConfig) -> Vec<Device> {
+    if let Some(ip) = routed_local_ipv4() {
+        let prefix = 24;
+        let net = network_address(ip, prefix);
+        scanner::scan_subnet(net, prefix, config)
+    } else {
+        vec![]
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn scan_network_desktop(config: &ScanConfig) -> Vec<Device> {
+    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
+        let net = network_address(ip, prefix);
+        scanner::scan_subnet(net, prefix, config)
+    } else {
+        vec![]
+    }
+}
+
+#[tauri::command]
+pub fn get_local_network_info() -> LocalNetworkInfo {
+    #[cfg(target_os = "android")]
+    return get_local_network_info_android();
+
+    #[cfg(not(target_os = "android"))]
+    return get_local_network_info_desktop();
+}
+
+#[tauri::command]
+pub fn scan_network() -> Vec<Device> {
+    let config = load_scan_config();
+
+    #[cfg(target_os = "android")]
+    return scan_network_android(&config);
+
+    #[cfg(not(target_os = "android"))]
+    return scan_network_desktop(&config);
 }
 
 fn is_link_local(ip: Ipv4Addr) -> bool {
@@ -83,36 +174,4 @@ fn active_ipv4_with_prefix() -> Option<(Ipv4Addr, u8)> {
     }
 
     Some((routed_ip, 24))
-}
-
-#[tauri::command]
-pub fn get_local_network_info() -> LocalNetworkInfo {
-    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
-        let net = network_address(ip, prefix);
-        LocalNetworkInfo {
-            address: Some(ip.to_string()),
-            prefix: Some(prefix),
-            network_address: Some(net.to_string()),
-            cidr: Some(format!("{}/{}", net, prefix)),
-        }
-    } else {
-        LocalNetworkInfo {
-            address: None,
-            prefix: None,
-            network_address: None,
-            cidr: None,
-        }
-    }
-}
-
-#[tauri::command]
-pub fn scan_network() -> Vec<Device> {
-    let config = load_scan_config();
-
-    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
-        let net = network_address(ip, prefix);
-        scanner::scan_subnet(net, prefix, &config)
-    } else {
-        vec![]
-    }
 }
