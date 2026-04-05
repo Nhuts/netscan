@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
 type Device = {
   ip: string;
@@ -15,20 +16,28 @@ type LocalNetworkInfo = {
 };
 
 let devices: Device[] = [];
-let selectedDevice: Device | null = null;
+//let _selectedDevice: Device | null = null;
 let currentView: "list" | "details" = "list";
 let isScanning = false;
-let scanRunId = 0;
+
+// Wir speichern die Unlisten-Funktionen, um sie sauber aufzuräumen
+let unlistenDiscovered: UnlistenFn | null = null;
+let unlistenFinished: UnlistenFn | null = null;
 
 function getDeviceLabel(device: Device): string {
   return device.name || device.hostname || device.ip;
+}
+
+// Hilfsfunktion zur numerischen Sortierung von IP-Adressen
+function ipToNum(ip: string): number {
+  return ip.split('.').map(Number).reduce((acc, octet) => (acc << 8) + octet, 0) >>> 0;
 }
 
 function renderDevices(deviceList: Device[]) {
   const listEl = document.getElementById("device-list") as HTMLElement | null;
   if (!listEl) return;
 
-  if (deviceList.length === 0) {
+  if (deviceList.length === 0 && !isScanning) {
     listEl.innerHTML = `
       <article class="device-card">
         <div class="device-main">
@@ -67,10 +76,10 @@ function renderDeviceDetails(device: Device) {
         <h3>${getDeviceLabel(device)}</h3>
         <p class="device-ip">${device.ip}</p>
         <p class="device-status">Status: <span class="status ${device.status}">${device.status}</span></p>
-        <p class="device-note">MAC-Adresse und offene Ports kommen in V2.</p>
+        <p class="device-note">Zusätzliche Infos.</p>
       </div>
       <div class="device-actions">
-        <button class="back-button" id="back-to-list" type="button">← Zurück zur Liste</button>
+        <button class="scan-button" id="back-to-list" type="button" style="background: var(--panel-2); margin-top: 20px;">← Zurück zur Liste</button>
       </div>
     </article>
   `;
@@ -78,160 +87,117 @@ function renderDeviceDetails(device: Device) {
 
 function setPanelTitle(text: string) {
   const titleEl = document.getElementById("panel-title");
-  if (titleEl) {
-    titleEl.textContent = text;
-  }
+  if (titleEl) titleEl.textContent = text;
 }
 
 function setSubtitle(text: string) {
   const subtitleEl = document.getElementById("device-subtitle");
-  if (subtitleEl) {
-    subtitleEl.textContent = text;
-  }
+  if (subtitleEl) subtitleEl.textContent = text;
 }
 
 function setScanButtonState() {
   const button = document.getElementById("scan-button") as HTMLButtonElement | null;
   if (!button) return;
-
-  button.disabled = false;
-  button.textContent = isScanning ? "Scan abbrechen" : "Scan starten";
-  button.setAttribute("aria-label", isScanning ? "Laufenden Scan abbrechen" : "Netzwerkscan starten");
-}
-
-function showReadyState() {
-  setSubtitle("Bereit. Kein Scan gestartet.");
-  setScanButtonState();
-}
-
-function showScanningState() {
-  setSubtitle("Scan läuft …");
-  setScanButtonState();
-}
-
-function showFinishedState(count: number) {
-  setSubtitle(`${count} Gerät(e) geladen.`);
-  setScanButtonState();
-}
-
-function showAbortedState() {
-  setSubtitle("Scan abgebrochen.");
-  setScanButtonState();
-}
-
-function showFailedState() {
-  setSubtitle("Scan fehlgeschlagen.");
-  setScanButtonState();
+  button.textContent = isScanning ? "Scan läuft..." : "Scan starten";
+  button.disabled = isScanning; 
 }
 
 async function loadNetworkInfo() {
   const networkEl = document.getElementById("network-info") as HTMLElement | null;
   if (!networkEl) return;
 
-  networkEl.textContent = "Lade Netzinfo …";
-
   try {
     const result = await invoke<LocalNetworkInfo>("get_local_network_info");
     networkEl.textContent = result.cidr ?? result.address ?? "Netz unbekannt";
   } catch (error) {
     console.error("Netzwerkinfo Fehler:", error);
-    networkEl.textContent = "Fehler beim Laden";
+    networkEl.textContent = "Fehler";
   }
 }
 
 async function runScan() {
-  if (isScanning) {
-    scanRunId += 1;
-    isScanning = false;
-    showAbortedState();
-    return;
-  }
+  if (isScanning) return;
+
+  // Cleanup alter Listener, falls vorhanden
+  if (unlistenDiscovered) unlistenDiscovered();
+  if (unlistenFinished) unlistenFinished();
 
   isScanning = true;
-  scanRunId += 1;
-  const currentRunId = scanRunId;
-
-  selectedDevice = null;
+  devices = [];
+  //_selectedDevice = null;
   currentView = "list";
+  
+  renderDevices([]);
   setPanelTitle("Gefundene Geräte");
-  showScanningState();
+  setSubtitle("Suche läuft...");
+  setScanButtonState();
+
+  // 1. Listen for new devices (Live-Update)
+  unlistenDiscovered = await listen<Device>("device-discovered", (event) => {
+    const newDevice = event.payload;
+    
+    // Update oder Neu hinzufügen
+    const existingIdx = devices.findIndex(d => d.ip === newDevice.ip);
+    if (existingIdx > -1) {
+      devices[existingIdx] = newDevice;
+    } else {
+      devices.push(newDevice);
+    }
+
+    // Sortieren nach IP
+    devices.sort((a, b) => ipToNum(a.ip) - ipToNum(b.ip));
+
+    if (currentView === "list") {
+      renderDevices(devices);
+      setSubtitle(`${devices.length} Geräte online`);
+    }
+  });
+
+  // 2. Listen for finish signal
+  unlistenFinished = await listen("scan-finished", () => {
+    isScanning = false;
+    setScanButtonState();
+    setSubtitle(`Scan beendet. ${devices.length} Geräte gefunden.`);
+  });
 
   try {
-    const newDevices = await invoke<Device[]>("scan_network");
-
-    if (currentRunId !== scanRunId) {
-      return;
-    }
-
-    devices = newDevices;
-    renderDevices(devices);
-    showFinishedState(devices.length);
+    // 3. Start the scan in Rust
+    await invoke("scan_network");
   } catch (error) {
-    if (currentRunId !== scanRunId) {
-      return;
-    }
-
     console.error("Scan Fehler:", error);
-    renderDevices([]);
-    showFailedState();
-  } finally {
-    if (currentRunId === scanRunId) {
-      isScanning = false;
-      setScanButtonState();
-    }
+    isScanning = false;
+    setScanButtonState();
+    setSubtitle("Scan fehlgeschlagen.");
   }
 }
 
 function attachGlobalEvents() {
-  const scanButton = document.getElementById("scan-button");
-  scanButton?.addEventListener("click", () => {
+  document.getElementById("scan-button")?.addEventListener("click", () => {
     void runScan();
   });
 
   document.addEventListener("click", (e) => {
-    const card = (e.target as HTMLElement).closest(".device-card[data-ip]") as HTMLElement | null;
+    const target = e.target as HTMLElement;
+    
+    // Klick auf Gerät
+    const card = target.closest(".device-card[data-ip]") as HTMLElement | null;
     if (card && currentView === "list") {
       const ip = card.dataset.ip;
-      if (!ip) return;
-
       const foundDevice = devices.find((d) => d.ip === ip);
-      if (!foundDevice) return;
-
-      selectedDevice = foundDevice;
-      currentView = "details";
-      renderDeviceDetails(foundDevice);
-      setPanelTitle("Gerätedetails");
+      if (foundDevice) {
+      //  _selectedDevice = foundDevice;
+        currentView = "details";
+        renderDeviceDetails(foundDevice);
+        setPanelTitle("Gerätedetails");
+      }
     }
-  });
 
-  document.addEventListener("click", (e) => {
-    const backButton = (e.target as HTMLElement).closest("#back-to-list");
-    if (backButton) {
+    // Klick auf Zurück-Button
+    if (target.id === "back-to-list") {
       currentView = "list";
       renderDevices(devices);
       setPanelTitle("Gefundene Geräte");
     }
-  });
-
-  document.addEventListener("keydown", (e) => {
-    const target = e.target as HTMLElement | null;
-    const card = target?.closest(".device-card[data-ip]") as HTMLElement | null;
-
-    if (!card || currentView !== "list") return;
-    if (e.key !== "Enter" && e.key !== " ") return;
-
-    e.preventDefault();
-
-    const ip = card.dataset.ip;
-    if (!ip) return;
-
-    const foundDevice = devices.find((d) => d.ip === ip);
-    if (!foundDevice) return;
-
-    selectedDevice = foundDevice;
-    currentView = "details";
-    renderDeviceDetails(foundDevice);
-    setPanelTitle("Gerätedetails");
   });
 }
 
@@ -256,8 +222,6 @@ window.addEventListener("DOMContentLoaded", () => {
           </div>
           <button class="scan-button" id="scan-button" type="button">Scan starten</button>
         </div>
-
-        <div class="scan-status" id="scan-status" aria-live="polite"></div>
         <div class="device-list" id="device-list"></div>
       </section>
     </main>
@@ -265,6 +229,5 @@ window.addEventListener("DOMContentLoaded", () => {
 
   attachGlobalEvents();
   renderDevices([]);
-  showReadyState();
   void loadNetworkInfo();
 });

@@ -1,36 +1,25 @@
 use std::net::Ipv4Addr;
-
-use crate::commands::Device;
+use tauri::AppHandle;
 use crate::config::ScanConfig;
+
+// Die Engine ist IMMER verfügbar
+mod engine;
 
 #[cfg(target_os = "windows")]
 mod windows;
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(any(target_os = "android", target_os = "ios"))]
-mod mobile;
+#[cfg(target_os = "android")]
+mod mobile; // Wieder aktivieren
 
 #[cfg(target_os = "windows")]
-pub fn scan_subnet(network_base: Ipv4Addr, prefix: u8, config: &ScanConfig) -> Vec<Device> {
-    windows::scan_subnet(network_base, prefix, config)
+pub async fn scan_subnet(app: AppHandle, net: Ipv4Addr, pre: u8, conf: ScanConfig) {
+    engine::scan_subnet(app, net, pre, conf).await;
 }
 
-#[cfg(target_os = "linux")]
-pub fn scan_subnet(network_base: Ipv4Addr, prefix: u8, config: &ScanConfig) -> Vec<Device> {
-    linux::scan_subnet(network_base, prefix, config)
+#[cfg(target_os = "android")]
+pub async fn scan_subnet(app: AppHandle, net: Ipv4Addr, pre: u8, conf: ScanConfig) {
+    engine::scan_subnet(app, net, pre, conf).await;
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn scan_subnet(network_base: Ipv4Addr, prefix: u8, config: &ScanConfig) -> Vec<Device> {
-    mobile::scan_subnet(network_base, prefix, config)
-}
-
-#[cfg(not(any(
-    target_os = "windows",
-    target_os = "linux",
-    target_os = "android",
-    target_os = "ios"
-)))]
-pub fn scan_subnet(_: Ipv4Addr, _: u8, _: &ScanConfig) -> Vec<Device> {
-    vec![]
-}
+// Fallback für andere OS
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
+pub async fn scan_subnet(_: AppHandle, _: Ipv4Addr, _: u8, _: ScanConfig) {}

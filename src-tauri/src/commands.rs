@@ -1,6 +1,7 @@
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
+use tauri::{AppHandle, command, Manager}; // Manager für Pfade, AppHandle für Events
 
 use crate::config::{load_scan_config, ScanConfig};
 use crate::scanner;
@@ -13,103 +14,14 @@ pub struct LocalNetworkInfo {
     pub cidr: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Default)]
 pub struct Device {
     pub ip: String,
     pub hostname: Option<String>,
     pub status: String,
 }
 
-#[cfg(target_os = "android")]
-fn get_local_network_info_android() -> LocalNetworkInfo {
-    // Versuche zuerst WLAN-Interface
-    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
-        let net = network_address(ip, prefix);
-        LocalNetworkInfo {
-            address: Some(ip.to_string()),
-            prefix: Some(prefix),
-            network_address: Some(net.to_string()),
-            cidr: Some(format!("{}/{}", net, prefix)),
-        }
-    } else if let Some(ip) = routed_local_ipv4() {
-        let prefix = 24;
-        let net = network_address(ip, prefix);
-        LocalNetworkInfo {
-            address: Some(ip.to_string()),
-            prefix: Some(prefix),
-            network_address: Some(net.to_string()),
-            cidr: Some(format!("{}/{}", net, prefix)),
-        }
-    } else {
-        LocalNetworkInfo {
-            address: None,
-            prefix: None,
-            network_address: None,
-            cidr: None,
-        }
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-fn get_local_network_info_desktop() -> LocalNetworkInfo {
-    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
-        let net = network_address(ip, prefix);
-        LocalNetworkInfo {
-            address: Some(ip.to_string()),
-            prefix: Some(prefix),
-            network_address: Some(net.to_string()),
-            cidr: Some(format!("{}/{}", net, prefix)),
-        }
-    } else {
-        LocalNetworkInfo {
-            address: None,
-            prefix: None,
-            network_address: None,
-            cidr: None,
-        }
-    }
-}
-
-#[cfg(target_os = "android")]
-fn scan_network_android(config: &ScanConfig) -> Vec<Device> {
-    if let Some(ip) = routed_local_ipv4() {
-        let prefix = 24;
-        let net = network_address(ip, prefix);
-        scanner::scan_subnet(net, prefix, config)
-    } else {
-        vec![]
-    }
-}
-
-#[cfg(not(target_os = "android"))]
-fn scan_network_desktop(config: &ScanConfig) -> Vec<Device> {
-    if let Some((ip, prefix)) = active_ipv4_with_prefix() {
-        let net = network_address(ip, prefix);
-        scanner::scan_subnet(net, prefix, config)
-    } else {
-        vec![]
-    }
-}
-
-#[tauri::command]
-pub fn get_local_network_info() -> LocalNetworkInfo {
-    #[cfg(target_os = "android")]
-    return get_local_network_info_android();
-
-    #[cfg(not(target_os = "android"))]
-    return get_local_network_info_desktop();
-}
-
-#[tauri::command]
-pub fn scan_network() -> Vec<Device> {
-    let config = load_scan_config();
-
-    #[cfg(target_os = "android")]
-    return scan_network_android(&config);
-
-    #[cfg(not(target_os = "android"))]
-    return scan_network_desktop(&config);
-}
+// --- Hilfsfunktionen für die Netzwerkberechnung (unverändert) ---
 
 fn is_link_local(ip: Ipv4Addr) -> bool {
     let octets = ip.octets();
@@ -125,11 +37,7 @@ fn u32_to_ipv4(value: u32) -> Ipv4Addr {
 }
 
 fn subnet_mask(prefix: u8) -> u32 {
-    if prefix == 0 {
-        0
-    } else {
-        u32::MAX << (32 - u32::from(prefix))
-    }
+    if prefix == 0 { 0 } else { u32::MAX << (32 - u32::from(prefix)) }
 }
 
 fn network_address(ip: Ipv4Addr, prefix: u8) -> Ipv4Addr {
@@ -172,6 +80,59 @@ fn active_ipv4_with_prefix() -> Option<(Ipv4Addr, u8)> {
             }
         }
     }
-
     Some((routed_ip, 24))
+}
+
+// --- Plattformspezifische Info-Logik ---
+
+fn get_local_network_info_internal() -> LocalNetworkInfo {
+    let info = active_ipv4_with_prefix().or_else(|| {
+        routed_local_ipv4().map(|ip| (ip, 24))
+    });
+
+    if let Some((ip, prefix)) = info {
+        let net = network_address(ip, prefix);
+        LocalNetworkInfo {
+            address: Some(ip.to_string()),
+            prefix: Some(prefix),
+            network_address: Some(net.to_string()),
+            cidr: Some(format!("{}/{}", net, prefix)),
+        }
+    } else {
+        LocalNetworkInfo {
+            address: None,
+            prefix: None,
+            network_address: None,
+            cidr: None,
+        }
+    }
+}
+
+// --- Die eigentlichen Tauri Commands ---
+
+#[command]
+pub fn get_local_network_info() -> LocalNetworkInfo {
+    get_local_network_info_internal()
+}
+
+#[command]
+pub async fn scan_network(app: AppHandle) {
+    // 1. Config laden (braucht jetzt &app für den Pfad)
+    let config = load_scan_config(&app);
+
+    // 2. Netzwerk-Basis ermitteln
+    let net_info = active_ipv4_with_prefix().or_else(|| {
+        #[cfg(target_os = "android")]
+        { routed_local_ipv4().map(|ip| (ip, 24)) }
+        #[cfg(not(target_os = "android"))]
+        { None }
+    });
+
+    if let Some((ip, prefix)) = net_info {
+        let net = network_address(ip, prefix);
+        
+        // 3. Den asynchronen Scan starten (in mod.rs/windows.rs definiert)
+        // Wir übergeben app, damit der Scanner Events senden kann
+        scanner::scan_subnet(app, net, prefix, config).await;
+    }
 }
