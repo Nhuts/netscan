@@ -16,9 +16,11 @@ type LocalNetworkInfo = {
 };
 
 let devices: Device[] = [];
+//let _selectedDevice: Device | null = null;
 let currentView: "list" | "details" = "list";
 let isScanning = false;
 
+// Wir speichern die Unlisten-Funktionen, um sie sauber aufzuräumen
 let unlistenDiscovered: UnlistenFn | null = null;
 let unlistenFinished: UnlistenFn | null = null;
 
@@ -26,6 +28,7 @@ function getDeviceLabel(device: Device): string {
   return device.name || device.hostname || device.ip;
 }
 
+// Hilfsfunktion zur numerischen Sortierung von IP-Adressen
 function ipToNum(ip: string): number {
   return ip.split('.').map(Number).reduce((acc, octet) => (acc << 8) + octet, 0) >>> 0;
 }
@@ -47,8 +50,9 @@ function renderDevices(deviceList: Device[]) {
   }
 
   listEl.innerHTML = deviceList
-    .map((device) => `
-        <article class="device-card" data-ip="${device.ip}" tabindex="0" role="button">
+    .map(
+      (device) => `
+        <article class="device-card" data-ip="${device.ip}" tabindex="0" role="button" aria-label="Gerät ${getDeviceLabel(device)} öffnen">
           <div class="device-main">
             <h3>${getDeviceLabel(device)}</h3>
             <p class="device-ip">${device.ip}</p>
@@ -57,7 +61,9 @@ function renderDevices(deviceList: Device[]) {
             <span class="status ${device.status}">${device.status}</span>
           </div>
         </article>
-      `).join("");
+      `
+    )
+    .join("");
 }
 
 function renderDeviceDetails(device: Device) {
@@ -65,38 +71,18 @@ function renderDeviceDetails(device: Device) {
   if (!listEl) return;
 
   listEl.innerHTML = `
-    <article class="device-card device-details-view">
+    <article class="device-card device-details">
       <div class="device-main">
         <h3>${getDeviceLabel(device)}</h3>
         <p class="device-ip">${device.ip}</p>
-        <div class="detail-info">
-          <p><strong>Status:</strong> <span class="status ${device.status}">${device.status}</span></p>
-          <p><strong>Hostname:</strong> ${device.hostname || 'Nicht verfügbar'}</p>
-          <p class="device-note" style="margin-top: 15px; opacity: 0.7;">Zusätzliche Netzwerkinformationen werden geladen...</p>
-        </div>
+        <p class="device-status">Status: <span class="status ${device.status}">${device.status}</span></p>
+        <p class="device-note">Zusätzliche Infos.</p>
+      </div>
+      <div class="device-actions">
+        <button class="scan-button" id="back-to-list" type="button" style="background: var(--panel-2); margin-top: 20px;">← Zurück zur Liste</button>
       </div>
     </article>
   `;
-}
-
-// OPTIMIERT: Schaltet die View um und verwaltet die Browser-Historie
-function updateUIState(view: "list" | "details", pushState: boolean = true) {
-  currentView = view;
-  const appShell = document.querySelector(".app-shell") as HTMLElement | null;
-  if (appShell) {
-    appShell.setAttribute("data-view", view);
-  }
-
-  if (view === "list") {
-    setPanelTitle("Gefundene Geräte");
-    renderDevices(devices);
-  } else {
-    setPanelTitle("Gerätedetails");
-    // Verhindert, dass beim Zurück-Wischen ein neuer State gepusht wird
-    if (pushState) {
-      window.history.pushState({ view: "details" }, "");
-    }
-  }
 }
 
 function setPanelTitle(text: string) {
@@ -112,42 +98,53 @@ function setSubtitle(text: string) {
 function setScanButtonState() {
   const button = document.getElementById("scan-button") as HTMLButtonElement | null;
   if (!button) return;
-  button.textContent = isScanning ? "Läuft..." : "Scan starten";
+  button.textContent = isScanning ? "Scan läuft..." : "Scan starten";
   button.disabled = isScanning; 
 }
 
 async function loadNetworkInfo() {
   const networkEl = document.getElementById("network-info") as HTMLElement | null;
   if (!networkEl) return;
+
   try {
     const result = await invoke<LocalNetworkInfo>("get_local_network_info");
     networkEl.textContent = result.cidr ?? result.address ?? "Netz unbekannt";
   } catch (error) {
+    console.error("Netzwerkinfo Fehler:", error);
     networkEl.textContent = "Fehler";
   }
 }
 
 async function runScan() {
   if (isScanning) return;
+
+  // Cleanup alter Listener, falls vorhanden
   if (unlistenDiscovered) unlistenDiscovered();
   if (unlistenFinished) unlistenFinished();
 
   isScanning = true;
   devices = [];
-  updateUIState("list");
+  //_selectedDevice = null;
+  currentView = "list";
   
   renderDevices([]);
+  setPanelTitle("Gefundene Geräte");
   setSubtitle("Suche läuft...");
   setScanButtonState();
 
+  // 1. Listen for new devices (Live-Update)
   unlistenDiscovered = await listen<Device>("device-discovered", (event) => {
     const newDevice = event.payload;
+    
+    // Update oder Neu hinzufügen
     const existingIdx = devices.findIndex(d => d.ip === newDevice.ip);
     if (existingIdx > -1) {
       devices[existingIdx] = newDevice;
     } else {
       devices.push(newDevice);
     }
+
+    // Sortieren nach IP
     devices.sort((a, b) => ipToNum(a.ip) - ipToNum(b.ip));
 
     if (currentView === "list") {
@@ -156,13 +153,22 @@ async function runScan() {
     }
   });
 
+  // 2. Listen for finish signal
   unlistenFinished = await listen("scan-finished", () => {
     isScanning = false;
     setScanButtonState();
-    setSubtitle(`Scan beendet. ${devices.length} gefunden.`);
+    setSubtitle(`Scan beendet. ${devices.length} Geräte gefunden.`);
   });
 
-  await invoke("scan_network");
+  try {
+    // 3. Start the scan in Rust
+    await invoke("scan_network");
+  } catch (error) {
+    console.error("Scan Fehler:", error);
+    isScanning = false;
+    setScanButtonState();
+    setSubtitle("Scan fehlgeschlagen.");
+  }
 }
 
 function attachGlobalEvents() {
@@ -170,31 +176,27 @@ function attachGlobalEvents() {
     void runScan();
   });
 
-  // Der Button nutzt jetzt die Historie
-  document.getElementById("close-details")?.addEventListener("click", () => {
-    if (currentView === "details") {
-      window.history.back();
-    }
-  });
-
-  // Reagiert auf die Android-Geste (Zurück-Wischen)
-  window.addEventListener("popstate", () => {
-    if (currentView === "details") {
-      updateUIState("list", false);
-    }
-  });
-
   document.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-    const card = target.closest(".device-card[data-ip]") as HTMLElement | null;
     
+    // Klick auf Gerät
+    const card = target.closest(".device-card[data-ip]") as HTMLElement | null;
     if (card && currentView === "list") {
       const ip = card.dataset.ip;
       const foundDevice = devices.find((d) => d.ip === ip);
       if (foundDevice) {
-        updateUIState("details");
+      //  _selectedDevice = foundDevice;
+        currentView = "details";
         renderDeviceDetails(foundDevice);
+        setPanelTitle("Gerätedetails");
       }
+    }
+
+    // Klick auf Zurück-Button
+    if (target.id === "back-to-list") {
+      currentView = "list";
+      renderDevices(devices);
+      setPanelTitle("Gefundene Geräte");
     }
   });
 }
@@ -204,13 +206,12 @@ window.addEventListener("DOMContentLoaded", () => {
   if (!app) return;
 
   app.innerHTML = `
-    <main class="app-shell" data-view="list">
+    <main class="app-shell">
       <header class="topbar">
         <div>
           <p class="eyebrow">Lokales Netzwerk</p>
-          <div class="network-pill" id="network-info">--</div>
         </div>
-        <button id="close-details" class="close-btn" title="Zurück">←</button>
+        <div class="network-pill" id="network-info">--</div>
       </header>
 
       <section class="panel">

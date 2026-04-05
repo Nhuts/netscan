@@ -64,6 +64,7 @@ input {
   padding: 32px 20px 40px;
 }
 
+/* TOPBAR OPTIMIERUNG */
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -83,14 +84,16 @@ input {
 
 .network-pill {
   white-space: nowrap;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--muted);
   box-shadow: var(--shadow);
+  font-size: 0.9rem;
 }
 
+/* PANEL & LISTEN */
 .panel {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
   border: 1px solid var(--border);
@@ -103,41 +106,76 @@ input {
 .panel-header {
   display: flex;
   justify-content: space-between;
-  align-items: end;
+  align-items: flex-end;
   gap: 16px;
   margin-bottom: 20px;
 }
 
 .panel-header h2 {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   font-size: 1.25rem;
 }
 
 .panel-header p {
   margin: 0;
   color: var(--muted);
+  font-size: 0.9rem;
 }
 
+/* BUTTONS */
 .scan-button {
   border: 1px solid transparent;
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 12px 20px;
   font-weight: 700;
   color: white;
   background: linear-gradient(180deg, var(--accent), #287ee0);
   cursor: pointer;
   transition: transform 0.15s ease, filter 0.15s ease;
+  white-space: nowrap;
 }
 
-.scan-button:hover {
-  filter: brightness(1.06);
+.scan-button:hover:not(:disabled) {
+  filter: brightness(1.1);
   transform: translateY(-1px);
 }
 
-.scan-button:active {
-  transform: translateY(0);
+.scan-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
 }
 
+/* DER NEUE SCHLIESSEN BUTTON */
+.close-btn {
+  display: none; /* Standardmäßig aus */
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1.2rem;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--border);
+}
+
+/* VIEW CONTROLS (Basierend auf data-view in main.ts) */
+.app-shell[data-view="details"] .close-btn {
+  display: flex; /* Anzeigen in Details */
+}
+
+.app-shell[data-view="details"] #scan-button {
+  display: none; /* Verstecken in Details */
+}
+
+/* GERÄTEKARTEN */
 .device-list {
   display: grid;
   gap: 12px;
@@ -152,6 +190,12 @@ input {
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--panel);
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.device-card:hover {
+  border-color: var(--accent);
 }
 
 .device-main h3 {
@@ -159,22 +203,14 @@ input {
   font-size: 1rem;
 }
 
-.device-main {
-  min-width: 0;
-}
-
 .device-ip {
   margin: 0;
   color: var(--muted);
   font-family: "Cascadia Code", "Consolas", monospace;
+  font-size: 0.9rem;
 }
 
-.device-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
+/* STATUS LABELS */
 .status {
   display: inline-flex;
   align-items: center;
@@ -182,11 +218,10 @@ input {
   min-width: 72px;
   padding: 6px 10px;
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  white-space: nowrap;
 }
 
 .status.online {
@@ -201,28 +236,22 @@ input {
   border: 1px solid rgba(111, 123, 138, 0.3);
 }
 
+/* HELPER */
+.hidden { display: none !important; }
+
+/* MOBILE ANPASSUNGEN */
 @media (max-width: 700px) {
   .app-shell {
     padding: 20px 14px 28px;
   }
 
-  .topbar,
-  .panel-header,
-  .device-card {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-  }
-
-  .network-pill {
-    width: 100%;
-    text-align: center;
-  }
-
-  .device-meta {
-    justify-content: flex-end;
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .scan-button {
     width: 100%;
+    padding: 14px;
   }
 }
