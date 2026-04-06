@@ -69,28 +69,38 @@ input {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.03); /* Leichter Hintergrund zur Gruppierung */
+  padding: 12px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.topbar > div:first-child {
+  display: flex;
+  flex-direction: column;
 }
 
 .eyebrow {
-  margin: 0 0 6px;
+  margin: 0;
   color: var(--accent-2);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  font-size: 0.7rem; /* Kleiner & feiner */
+  font-weight: 800;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  opacity: 0.8;
 }
 
+
 .network-pill {
-  white-space: nowrap;
-  padding: 10px 16px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 2px 0; /* Schlanker */
+  border: none; /* Rand entfernt, da Topbar jetzt Rand hat */
+  background: transparent;
   color: var(--muted);
-  box-shadow: var(--shadow);
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow: none;
 }
 
 /* PANEL & LISTEN */
@@ -151,9 +161,10 @@ input {
 /* BUTTONS */
 .scan-button {
   border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 12px 20px;
-  font-weight: 700;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
   color: white;
   background: linear-gradient(180deg, var(--accent), #287ee0);
   cursor: pointer;
@@ -208,11 +219,12 @@ input {
 }
 
 .device-card {
-  display: grid;
+  display: flex;
+  justify-content: space-between;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  padding: 16px 18px;
+  gap: 12px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--panel);
@@ -224,6 +236,11 @@ input {
   border-color: var(--accent);
 }
 
+.device-main {
+  min-width: 0; /* WICHTIG: Erlaubt das Kürzen von Text innerhalb von Flex-Containern */
+  flex: 1;
+}
+
 .device-main h3 {
   margin: 0 0 4px;
   font-size: 1rem;
@@ -233,7 +250,7 @@ input {
   margin: 0;
   color: var(--muted);
   font-family: "Cascadia Code", "Consolas", monospace;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 /* STATUS LABELS */
@@ -241,10 +258,10 @@ input {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 72px;
-  padding: 6px 10px;
+  min-width: 64px;
+  padding: 4px 8px;
   border-radius: 999px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
