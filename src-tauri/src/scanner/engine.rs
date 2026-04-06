@@ -1,5 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr};
-use std::time::Duration;
+use std::time::{Duration, Instant}; // Instant hinzugefügt
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tauri::{AppHandle, Emitter};
@@ -7,13 +7,20 @@ use tauri::{AppHandle, Emitter};
 use crate::commands::Device;
 use crate::config::ScanConfig;
 
-async fn ping_host_async(ip: Ipv4Addr, timeout_ms: u64) -> bool {
+// ÄNDERUNG: Gibt jetzt (Erfolg, Latenz_ms) zurück
+async fn ping_host_async(ip: Ipv4Addr, timeout_ms: u64) -> (bool, u64) {
     let addr = IpAddr::V4(ip);
     let timeout = Duration::from_millis(timeout_ms);
-    tokio::task::spawn_blocking(move || {
+    
+    let start = Instant::now(); // Zeitmessung starten
+
+    let success = tokio::task::spawn_blocking(move || {
         let options = ping_rs::PingOptions { ttl: 128, dont_fragment: true };
         ping_rs::send_ping(&addr, timeout, &[1, 2, 3, 4], Some(&options)).is_ok()
-    }).await.unwrap_or(false)
+    }).await.unwrap_or(false);
+
+    let duration = start.elapsed().as_millis() as u64; // Zeitmessung beenden
+    (success, duration)
 }
 
 async fn resolve_hostname_async(ip: Ipv4Addr) -> Option<String> {
@@ -40,7 +47,11 @@ pub async fn scan_subnet(app: AppHandle, network_base: Ipv4Addr, prefix: u8, con
 
         let task = tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
-            if ping_host_async(ip, conf.ping_timeout_ms).await {
+            
+            // ÄNDERUNG: Wir fangen Erfolg und Latenz ab
+            let (is_online, latency) = ping_host_async(ip, conf.ping_timeout_ms).await;
+
+            if is_online {
                 let hostname = if conf.mdns_lookup_enabled {
                     resolve_hostname_async(ip).await
                 } else {
@@ -51,12 +62,14 @@ pub async fn scan_subnet(app: AppHandle, network_base: Ipv4Addr, prefix: u8, con
                     ip: ip.to_string(),
                     hostname: hostname.or(Some(ip.to_string())),
                     status: "online".to_string(),
+                    latency, // ÄNDERUNG: Latenz wird hier übergeben
                 });
             } else if conf.show_offline_devices {
                 let _ = app_handle.emit("device-discovered", Device {
                     ip: ip.to_string(),
                     hostname: None,
                     status: "offline".to_string(),
+                    latency: 0, // Offline-Geräte haben keinen Ping
                 });
             }
         });

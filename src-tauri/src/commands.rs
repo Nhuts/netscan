@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
 use tauri::{AppHandle, command, Manager}; // Manager für Pfade, AppHandle für Events
 
-use crate::config::{load_scan_config, ScanConfig};
+use crate::config::load_scan_config;
 use crate::scanner;
 
 #[derive(Serialize, Clone)]
@@ -19,6 +19,7 @@ pub struct Device {
     pub ip: String,
     pub hostname: Option<String>,
     pub status: String,
+    pub latency: u64,
 }
 
 // --- Hilfsfunktionen für die Netzwerkberechnung (unverändert) ---

@@ -122,6 +122,32 @@ input {
   font-size: 0.9rem;
 }
 
+/* Der Spinner selbst */
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: 2px solid var(--accent); /* Nutzt dein Blau */
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Hilfsklasse für den Scan-Status im Header */
+.scan-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 /* BUTTONS */
 .scan-button {
   border: 1px solid transparent;
@@ -234,6 +260,31 @@ input {
   background: rgba(111, 123, 138, 0.18);
   color: #c1cad6;
   border: 1px solid rgba(111, 123, 138, 0.3);
+}
+
+/* Dynamische Ping-Farben */
+.status.online.ping-low {
+  background: rgba(51, 194, 107, 0.15);
+  color: #33c26b; /* Grün < 50ms */
+  border-color: rgba(51, 194, 107, 0.3);
+}
+
+.status.online.ping-medium {
+  background: rgba(255, 215, 0, 0.15);
+  color: #ffd700; /* Gelb < 100ms */
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
+.status.online.ping-high {
+  background: rgba(255, 140, 0, 0.15);
+  color: #ff8c00; /* Orange < 150ms */
+  border-color: rgba(255, 140, 0, 0.3);
+}
+
+.status.online.ping-critical {
+  background: rgba(255, 69, 58, 0.15);
+  color: #ff453a; /* Rot >= 150ms */
+  border-color: rgba(255, 69, 58, 0.3);
 }
 
 /* HELPER */

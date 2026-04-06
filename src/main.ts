@@ -6,6 +6,7 @@ type Device = {
   name?: string;
   hostname?: string;
   status: "online" | "offline";
+  latency?: number; // Latenz vom Rust-Backend
 };
 
 type LocalNetworkInfo = {
@@ -24,6 +25,33 @@ let unlistenFinished: UnlistenFn | null = null;
 
 function getDeviceLabel(device: Device): string {
   return device.name || device.hostname || device.ip;
+}
+
+/**
+ * Erzeugt das Status-Badge mit Latenz-Farben oder Ladekringel
+ */
+function getStatusBadge(device: Device): string {
+  if (device.status === "offline") {
+    return `<span class="status offline">Offline</span>`;
+  }
+
+  // Falls online, aber noch kein Ping-Wert da ist (Ladekringel im Badge)
+  if (device.latency === undefined || device.latency === null) {
+    return `<span class="status online"><span class="spinner" style="width:12px; height:12px; border-width:1px;"></span></span>`;
+  }
+
+  const ms = device.latency;
+  let colorClass = "ping-low"; // < 50ms (Grün)
+
+  if (ms >= 150) {
+    colorClass = "ping-critical"; // Rot
+  } else if (ms >= 100) {
+    colorClass = "ping-high"; // Orange
+  } else if (ms >= 50) {
+    colorClass = "ping-medium"; // Gelb
+  }
+
+  return `<span class="status online ${colorClass}">${ms} ms</span>`;
 }
 
 function ipToNum(ip: string): number {
@@ -54,7 +82,7 @@ function renderDevices(deviceList: Device[]) {
             <p class="device-ip">${device.ip}</p>
           </div>
           <div class="device-meta">
-            <span class="status ${device.status}">${device.status}</span>
+            ${getStatusBadge(device)}
           </div>
         </article>
       `).join("");
@@ -70,16 +98,15 @@ function renderDeviceDetails(device: Device) {
         <h3>${getDeviceLabel(device)}</h3>
         <p class="device-ip">${device.ip}</p>
         <div class="detail-info">
-          <p><strong>Status:</strong> <span class="status ${device.status}">${device.status}</span></p>
+          <p><strong>Status:</strong> ${getStatusBadge(device)}</p>
           <p><strong>Hostname:</strong> ${device.hostname || 'Nicht verfügbar'}</p>
-          <p class="device-note" style="margin-top: 15px; opacity: 0.7;">Zusätzliche Netzwerkinformationen werden geladen...</p>
+          <p class="device-note" style="margin-top: 15px; opacity: 0.7;">Gerät ist über das lokale Netzwerk erreichbar.</p>
         </div>
       </div>
     </article>
   `;
 }
 
-// OPTIMIERT: Schaltet die View um und verwaltet die Browser-Historie
 function updateUIState(view: "list" | "details", pushState: boolean = true) {
   currentView = view;
   const appShell = document.querySelector(".app-shell") as HTMLElement | null;
@@ -92,7 +119,6 @@ function updateUIState(view: "list" | "details", pushState: boolean = true) {
     renderDevices(devices);
   } else {
     setPanelTitle("Gerätedetails");
-    // Verhindert, dass beim Zurück-Wischen ein neuer State gepusht wird
     if (pushState) {
       window.history.pushState({ view: "details" }, "");
     }
@@ -104,9 +130,23 @@ function setPanelTitle(text: string) {
   if (titleEl) titleEl.textContent = text;
 }
 
+/**
+ * Zeigt Text an, inkl. Spinner wenn ein Scan läuft
+ */
 function setSubtitle(text: string) {
   const subtitleEl = document.getElementById("device-subtitle");
-  if (subtitleEl) subtitleEl.textContent = text;
+  if (!subtitleEl) return;
+
+  if (isScanning) {
+    subtitleEl.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="spinner"></span>
+        <span>${text}</span>
+      </div>
+    `;
+  } else {
+    subtitleEl.textContent = text;
+  }
 }
 
 function setScanButtonState() {
@@ -152,7 +192,7 @@ async function runScan() {
 
     if (currentView === "list") {
       renderDevices(devices);
-      setSubtitle(`${devices.length} Geräte online`);
+      setSubtitle(`${devices.length} Geräte gefunden`);
     }
   });
 
@@ -170,14 +210,12 @@ function attachGlobalEvents() {
     void runScan();
   });
 
-  // Der Button nutzt jetzt die Historie
   document.getElementById("close-details")?.addEventListener("click", () => {
     if (currentView === "details") {
       window.history.back();
     }
   });
 
-  // Reagiert auf die Android-Geste (Zurück-Wischen)
   window.addEventListener("popstate", () => {
     if (currentView === "details") {
       updateUIState("list", false);
