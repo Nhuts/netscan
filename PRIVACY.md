@@ -5,21 +5,24 @@ Last Updated: April 7, 2026
 This Privacy Policy describes how NetScan ("the Application") handles data. NetScan is a local network diagnostic tool designed to provide users with an overview of devices within their own private network infrastructure.
 1. Core Principle: Privacy by Design
 
-NetScan is designed to operate as a local-only tool.
+NetScan operates as a local-only tool.
 
     No Data Collection: The Application does not collect, store, or transmit any personal data to external servers.
 
     No Cloud Dependency: All network analysis and processing are performed locally on the user's device.
 
-    No Third-Party Analytics: The Application does not contain any tracking libraries, advertisements, or third-party telemetry.
+    No Third-Party Analytics: The Application does not contain tracking libraries, advertisements, or third-party telemetry.
 
-2. Permissions and Data Usage
+2. Children’s Privacy
 
-To provide its core functionality, the Application requires specific system permissions. These are used exclusively for local network discovery:
-2.1 Network Information
+NetScan does not collect, transmit, or share any personal information or identifiers. It is compliant with children’s privacy regulations, including COPPA and GDPR. The Application is safe for use by all age groups as no data is harvested from the device.
+3. Permissions and Data Usage
 
-The Application accesses local network details (IP address, Subnet Mask, and SSID) to determine the boundaries of the network scan. This data is processed in volatile memory and is never exported.
-2.2 Location Services (Android Only)
+The Application requires specific system permissions exclusively for local network discovery:
+3.1 Network Information
+
+The Application accesses local network details (IP address, Subnet Mask, and SSID) to determine the boundaries of the network scan. This data is processed in volatile memory and is never exported or shared.
+3.2 Location Services (Android Only)
 
 On Android devices, the Application requires ACCESS_FINE_LOCATION permissions.
 
@@ -27,20 +30,25 @@ On Android devices, the Application requires ACCESS_FINE_LOCATION permissions.
 
     Usage: The Application does not access GPS coordinates or track the user’s physical location. It utilizes this permission solely to identify the local network environment.
 
-2.3 Hardware Identifiers (MAC Addresses)
+3.3 Hardware Identifiers (MAC Addresses)
 
-The Application may attempt to resolve MAC addresses to identify device manufacturers (OUI lookup).
+The Application handles hardware identifiers differently based on the operating system:
 
-    Desktop Versions: Performed via local ARP table requests.
+    Desktop Versions: The Application resolves MAC addresses via local ARP table requests for the purpose of identifying device manufacturers.
 
-    Mobile Versions: Subject to OS-level sandboxing. Hardware identifiers are used only for local display and are not used for persistent tracking or user profiling.
+    Android Version: The Application does not collect or resolve MAC addresses. Due to OS-level sandboxing and privacy standards, hardware identifiers are not accessed or processed on mobile devices.
 
-3. Data Storage
+4. Data Storage and Deletion
 
-The Application may store user-defined configurations (such as scan intervals or custom device labels) in a local configuration file (scan-config.json). This file remains on the user's local file system and is not synchronized with any cloud services.
-4. Transparency
+The Application stores user-defined configurations (such as scan intervals or custom device labels) in a local configuration file (scan-config.json).
 
-As an open-source project, the source code of NetScan is available for public audit. Users are encouraged to review the implementation of network commands in the src-tauri directory to verify data handling practices.
-5. Contact
+    Local Only: This file remains on the user's local file system and is not synchronized with cloud services.
 
-For questions regarding this Privacy Policy or the technical implementation of network scans, please open an issue in the GitHub repository.
+    Data Control: Users can delete all locally stored configuration data at any time by clearing the Application's cache/data in the Android system settings or by uninstalling the Application.
+
+5. Transparency
+
+As an open-source project, the source code of NetScan is available for public audit. The implementation of network commands in the src-tauri directory is open for verification of these data handling practices.
+6. Contact
+
+For questions regarding this Privacy Policy or the technical implementation of network scans, users can open an issue in the GitHub repository.
