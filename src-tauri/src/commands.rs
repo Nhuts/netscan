@@ -1,7 +1,7 @@
 use network_interface::{NetworkInterface, NetworkInterfaceConfig};
 use serde::Serialize;
 use std::net::{IpAddr, Ipv4Addr, UdpSocket};
-use tauri::{AppHandle, command, Manager}; // Manager für Pfade, AppHandle für Events
+use tauri::{command, AppHandle, Manager}; // Manager für Pfade, AppHandle für Events
 
 use crate::config::load_scan_config;
 use crate::scanner;
@@ -38,7 +38,11 @@ fn u32_to_ipv4(value: u32) -> Ipv4Addr {
 }
 
 fn subnet_mask(prefix: u8) -> u32 {
-    if prefix == 0 { 0 } else { u32::MAX << (32 - u32::from(prefix)) }
+    if prefix == 0 {
+        0
+    } else {
+        u32::MAX << (32 - u32::from(prefix))
+    }
 }
 
 fn network_address(ip: Ipv4Addr, prefix: u8) -> Ipv4Addr {
@@ -87,9 +91,7 @@ fn active_ipv4_with_prefix() -> Option<(Ipv4Addr, u8)> {
 // --- Plattformspezifische Info-Logik ---
 
 fn get_local_network_info_internal() -> LocalNetworkInfo {
-    let info = active_ipv4_with_prefix().or_else(|| {
-        routed_local_ipv4().map(|ip| (ip, 24))
-    });
+    let info = active_ipv4_with_prefix().or_else(|| routed_local_ipv4().map(|ip| (ip, 24)));
 
     if let Some((ip, prefix)) = info {
         let net = network_address(ip, prefix);
@@ -124,14 +126,18 @@ pub async fn scan_network(app: AppHandle) {
     // 2. Netzwerk-Basis ermitteln
     let net_info = active_ipv4_with_prefix().or_else(|| {
         #[cfg(target_os = "android")]
-        { routed_local_ipv4().map(|ip| (ip, 24)) }
+        {
+            routed_local_ipv4().map(|ip| (ip, 24))
+        }
         #[cfg(not(target_os = "android"))]
-        { None }
+        {
+            None
+        }
     });
 
     if let Some((ip, prefix)) = net_info {
         let net = network_address(ip, prefix);
-        
+
         // 3. Den asynchronen Scan starten (in mod.rs/windows.rs definiert)
         // Wir übergeben app, damit der Scanner Events senden kann
         scanner::scan_subnet(app, net, prefix, config).await;

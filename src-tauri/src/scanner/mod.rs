@@ -1,14 +1,14 @@
+use crate::config::ScanConfig;
 use std::net::Ipv4Addr;
 use tauri::AppHandle;
-use crate::config::ScanConfig;
 
 // Die Engine ist IMMER verfügbar
 mod engine;
 
-#[cfg(target_os = "windows")]
-mod windows;
 #[cfg(target_os = "android")]
-mod mobile; // Wieder aktivieren
+mod mobile;
+#[cfg(target_os = "windows")]
+mod windows; // Wieder aktivieren
 
 #[cfg(target_os = "windows")]
 pub async fn scan_subnet(app: AppHandle, net: Ipv4Addr, pre: u8, conf: ScanConfig) {

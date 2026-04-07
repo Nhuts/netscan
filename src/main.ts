@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 type Device = {
   ip: string;
   name?: string;
   hostname?: string;
   status: "online" | "offline";
-  latency?: number; // Latenz vom Rust-Backend
+  latency?: number;
 };
 
 type LocalNetworkInfo = {
@@ -28,27 +29,35 @@ function getDeviceLabel(device: Device): string {
 }
 
 /**
- * Erzeugt das Status-Badge mit Latenz-Farben oder Ladekringel
+ * Kopierfunktion mit visuellem Feedback in der Konsole
  */
+async function copyToClipboard(text: string) {
+  try {
+    await writeText(text);
+    console.log("Kopiert: " + text);
+  } catch (err) {
+    console.error("Fehler beim Kopieren:", err);
+  }
+}
+
 function getStatusBadge(device: Device): string {
   if (device.status === "offline") {
     return `<span class="status offline">Offline</span>`;
   }
 
-  // Falls online, aber noch kein Ping-Wert da ist (Ladekringel im Badge)
   if (device.latency === undefined || device.latency === null) {
     return `<span class="status online"><span class="spinner" style="width:12px; height:12px; border-width:1px;"></span></span>`;
   }
 
   const ms = device.latency;
-  let colorClass = "ping-low"; // < 50ms (Grün)
+  let colorClass = "ping-low";
 
   if (ms >= 150) {
-    colorClass = "ping-critical"; // Rot
+    colorClass = "ping-critical";
   } else if (ms >= 100) {
-    colorClass = "ping-high"; // Orange
+    colorClass = "ping-high";
   } else if (ms >= 50) {
-    colorClass = "ping-medium"; // Gelb
+    colorClass = "ping-medium";
   }
 
   return `<span class="status online ${colorClass}">${ms} ms</span>`;
@@ -88,16 +97,30 @@ function renderDevices(deviceList: Device[]) {
       `).join("");
 }
 
+/**
+ * Details-Ansicht mit Kopier-Icons
+ */
 function renderDeviceDetails(device: Device) {
   const listEl = document.getElementById("device-list") as HTMLElement | null;
   if (!listEl) return;
 
+  const copyIconSVG = `
+    <svg class="copy-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 8px; opacity: 0.5; cursor: pointer;">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+  `;
+
   listEl.innerHTML = `
     <article class="device-card device-details-view">
       <div class="device-main">
-        <h3>${getDeviceLabel(device)}</h3>
-        <p class="device-ip">${device.ip}</p>
-        <div class="detail-info">
+        <h3 class="copy-trigger" data-text="${getDeviceLabel(device)}" style="display: flex; align-items: center; cursor: pointer;">
+          ${getDeviceLabel(device)} ${copyIconSVG}
+        </h3>
+        <p class="device-ip copy-trigger" data-text="${device.ip}" style="display: flex; align-items: center; cursor: pointer; margin-top: 4px;">
+          ${device.ip} ${copyIconSVG}
+        </p>
+        <div class="detail-info" style="margin-top: 20px;">
           <p><strong>Status:</strong> ${getStatusBadge(device)}</p>
           <p><strong>Hostname:</strong> ${device.hostname || 'Nicht verfügbar'}</p>
           <p class="device-note" style="margin-top: 15px; opacity: 0.7;">Gerät ist über das lokale Netzwerk erreichbar.</p>
@@ -130,9 +153,6 @@ function setPanelTitle(text: string) {
   if (titleEl) titleEl.textContent = text;
 }
 
-/**
- * Zeigt Text an, inkl. Spinner wenn ein Scan läuft
- */
 function setSubtitle(text: string) {
   const subtitleEl = document.getElementById("device-subtitle");
   if (!subtitleEl) return;
@@ -224,8 +244,22 @@ function attachGlobalEvents() {
 
   document.addEventListener("click", (e) => {
     const target = e.target as HTMLElement;
-    const card = target.closest(".device-card[data-ip]") as HTMLElement | null;
     
+    // 1. Klick auf Kopier-Icons in Details
+    const copyTrigger = target.closest(".copy-trigger") as HTMLElement | null;
+    if (copyTrigger) {
+      const text = copyTrigger.getAttribute("data-text");
+      if (text) {
+        void copyToClipboard(text);
+        // Kleiner visueller Effekt beim Klick
+        copyTrigger.style.opacity = "0.5";
+        setTimeout(() => copyTrigger.style.opacity = "1", 100);
+      }
+      return; // Verhindert, dass die Karten-Logik feuert
+    }
+
+    // 2. Klick auf eine Geräte-Karte (für Details)
+    const card = target.closest(".device-card[data-ip]") as HTMLElement | null;
     if (card && currentView === "list") {
       const ip = card.dataset.ip;
       const foundDevice = devices.find((d) => d.ip === ip);
@@ -248,6 +282,9 @@ window.addEventListener("DOMContentLoaded", () => {
           <p class="eyebrow">Lokales Netzwerk</p>
           <div class="network-pill" id="network-info">--</div>
         </div>
+        
+        <button class="scan-button" id="scan-button" type="button">Scan starten</button>
+        
         <button id="close-details" class="close-btn" title="Zurück">←</button>
       </header>
 
@@ -257,7 +294,6 @@ window.addEventListener("DOMContentLoaded", () => {
             <h2 id="panel-title">Gefundene Geräte</h2>
             <p id="device-subtitle">Bereit. Kein Scan gestartet.</p>
           </div>
-          <button class="scan-button" id="scan-button" type="button">Scan starten</button>
         </div>
         <div class="device-list" id="device-list"></div>
       </section>

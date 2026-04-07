@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::env;
+use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri::Manager;
@@ -36,7 +36,8 @@ pub fn load_scan_config(app: &AppHandle) -> ScanConfig {
     let config_path = if let Some(p) = portable_path {
         p
     } else {
-        app.path().app_config_dir()
+        app.path()
+            .app_config_dir()
             .map(|p| p.join("scan-config.json"))
             .unwrap_or_else(|_| PathBuf::from("scan-config.json"))
     };
@@ -46,10 +47,10 @@ pub fn load_scan_config(app: &AppHandle) -> ScanConfig {
         Ok(content) => {
             // Falls die Datei existiert, aber ungültig ist, nehmen wir Default
             serde_json::from_str(&content).unwrap_or_default()
-        },
+        }
         Err(_) => {
             let default_config = ScanConfig::default();
-            
+
             // Versuche, die Standard-Config als Datei zu speichern
             if let Ok(json) = serde_json::to_string_pretty(&default_config) {
                 // Stelle sicher, dass der Ordner existiert (wichtig für Nicht-Portable-Pfad)
@@ -62,5 +63,3 @@ pub fn load_scan_config(app: &AppHandle) -> ScanConfig {
         }
     }
 }
-
-
