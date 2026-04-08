@@ -19,7 +19,7 @@ impl Default for ScanConfig {
         Self {
             max_parallel_tasks: 16,
             ping_timeout_ms: 200,
-            show_offline_devices: false,
+            show_offline_devices: true,
             mdns_lookup_enabled: true,
             scan_interval_ms: 5000,
         }

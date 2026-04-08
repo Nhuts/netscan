@@ -120,7 +120,7 @@ pub fn get_local_network_info() -> LocalNetworkInfo {
 
 #[command]
 pub async fn scan_network(app: AppHandle) {
-    // 1. Config laden (braucht jetzt &app für den Pfad)
+    // 1. Config laden 
     let config = load_scan_config(&app);
 
     // 2. Netzwerk-Basis ermitteln
@@ -138,7 +138,7 @@ pub async fn scan_network(app: AppHandle) {
     if let Some((ip, prefix)) = net_info {
         let net = network_address(ip, prefix);
 
-        // 3. Den asynchronen Scan starten (in mod.rs/windows.rs definiert)
+        // asynchronen Scan starten (in mod.rs/windows.rs definiert)
         // Wir übergeben app, damit der Scanner Events senden kann
         scanner::scan_subnet(app, net, prefix, config).await;
     }
